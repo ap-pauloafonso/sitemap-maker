@@ -13,6 +13,17 @@ import (
 	linkParse "github.com/ap-pauloafonso/html-link-parse"
 )
 
+const xmlns = "http://www.sitemaps.org/schemas/sitemap/0.9"
+
+type sitemapxml struct {
+	XMLName xml.Name `xml:"urlset"`
+	Loc     []urlxml `xml:"url"`
+	Xmlns   string   `xml:"xmlns,attr"`
+}
+type urlxml struct {
+	Loc string `xml:"loc"`
+}
+
 func main() {
 	urlFlag := flag.String("url", "", "valid url")
 	depthFlag := flag.Int("depth", 1000, "maximum search depth")
@@ -25,7 +36,7 @@ func main() {
 
 	var result = bfsNodes(strings.TrimSuffix(u.String(), "/"), *depthFlag)
 
-	v := sitemapxml{}
+	v := sitemapxml{Xmlns: xmlns}
 	for _, val := range result {
 		v.Loc = append(v.Loc, urlxml{Loc: val})
 	}
@@ -35,6 +46,7 @@ func main() {
 		fmt.Printf("error: %v\n", err)
 	}
 
+	os.Stdout.Write([]byte(xml.Header))
 	os.Stdout.Write(output)
 }
 
@@ -98,14 +110,6 @@ func bfsNodes(stringURL string, depth int) []string {
 	}
 
 	return result
-}
-
-type sitemapxml struct {
-	XMLName xml.Name `xml:"urlset"`
-	Loc     []urlxml `xml:"url"`
-}
-type urlxml struct {
-	Loc string `xml:"loc"`
 }
 
 func filter(baseURL string, stringUrls []string) []string {
