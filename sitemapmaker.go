@@ -26,7 +26,7 @@ type urlxml struct {
 
 func main() {
 	urlFlag := flag.String("url", "", "valid url")
-	depthFlag := flag.Int("depth", 1000, "maximum search depth")
+	depthFlag := flag.Int("depth", 3, "maximum search depth")
 	flag.Parse()
 
 	u, err := url.Parse(*urlFlag)
