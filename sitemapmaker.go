@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -13,19 +14,21 @@ import (
 )
 
 func main() {
-	url := flag.String("url", "default value", "here comes usage")
+	urlFlag := flag.String("url", "", "valid url")
+	depthFlag := flag.Int("depth", 1000, "maximum search depth")
 	flag.Parse()
 
-	var result = bfsNodes(*url, 0)
+	u, err := url.Parse(*urlFlag)
+	if err != nil || *urlFlag == "" {
+		panic("valid -url flag required")
+	}
 
-	arr := []string{}
+	var result = bfsNodes(strings.TrimSuffix(u.String(), "/"), *depthFlag)
+
 	v := sitemapxml{}
-
 	for _, val := range result {
-		arr = append(arr, val)
 		v.Loc = append(v.Loc, urlxml{Loc: val})
 	}
-	// fmt.Printf("%+v/n", arr)
 
 	output, err := xml.MarshalIndent(v, "", "    ")
 	if err != nil {
@@ -35,7 +38,7 @@ func main() {
 	os.Stdout.Write(output)
 }
 
-func getUrls(stringURL string) []string {
+func getUrls(stringURL, domainURL string) []string {
 	response, error := http.Get(stringURL)
 	defer response.Body.Close()
 	ret := []string{}
@@ -44,59 +47,18 @@ func getUrls(stringURL string) []string {
 		childNodes := linkParse.Parse(string(htmlBytes))
 
 		for _, val := range childNodes {
-			ret = append(ret, val.Url)
+			ret = append(ret, normalize(domainURL, val.Url))
 		}
 
 	}
-	return ret
+
+	filteredRet := filter(domainURL, ret)
+	return filteredRet
 }
 
-// func parse(link []linkParse.Link) map[string]linkParse.Link {
-// 	domainURL := link[0].Url
-// 	result := map[string]linkParse.Link{}
-// 	var f func(link []linkParse.Link)
-// 	iter := 0
-// 	f = func(link []linkParse.Link) {
-// 		iter++
-// 		fmt.Println(iter)
-// 		childs := map[string]linkParse.Link{}
-// 		for _, item := range link {
-// 			if _, ok := result[item.Url]; !ok {
-// 				result[item.Url] = item
-// 				response, error := http.Get(item.Url)
-// 				if error == nil {
-// 					htmlBytes, _ := ioutil.ReadAll(response.Body)
-// 					childNodes := linkParse.Parse(string(htmlBytes))
-// 					validChilds := filterUrls(domainURL, childNodes)
-// 					for _, child := range validChilds {
-// 						if _, a := childs[child.Url]; !a {
-// 							if _, b := result[child.Url]; !b {
-// 								childs[child.Url] = child
-// 							}
-// 						}
-// 					}
-// 				}
-
-// 			}
-
-// 		}
-// 		arr := make([]linkParse.Link, 0, len(childs))
-// 		for _, val := range childs {
-// 			arr = append(arr, val)
-// 		}
-// 		if len(arr) > 0 {
-// 			f(arr)
-// 		}
-// 	}
-
-// 	f(link)
-// 	return result
-// }
-
-//Node is struct to help traverse the tree
-type Node struct {
-	URL       string
-	ChildURLS []string
+func mapContainsKey(m map[string]struct{}, k string) bool {
+	_, ok := m[k]
+	return ok
 }
 
 func bfsNodes(stringURL string, depth int) []string {
@@ -106,19 +68,16 @@ func bfsNodes(stringURL string, depth int) []string {
 
 	f = func(u []string) {
 		iter++
-		fmt.Println(iter)
 		childs := map[string]struct{}{}
 		for _, val := range u {
 			if _, ok := visited[val]; ok {
 				continue
 			}
 			visited[val] = struct{}{}
-			filteredChilds := filterUrls(stringURL, getUrls(val))
+			filteredChilds := getUrls(val, stringURL)
 			for _, child := range filteredChilds {
-				if _, ok1 := visited[child]; !ok1 {
-					if _, ok2 := childs[child]; !ok2 {
-						childs[child] = struct{}{}
-					}
+				if !mapContainsKey(visited, child) && !mapContainsKey(childs, child) {
+					childs[child] = struct{}{}
 				}
 			}
 		}
@@ -126,10 +85,9 @@ func bfsNodes(stringURL string, depth int) []string {
 		for k := range childs {
 			ret = append(ret, k)
 		}
-		if len(ret) > 0 {
+		if len(ret) > 0 && iter < depth {
 			f(ret)
 		}
-
 	}
 
 	f([]string{stringURL})
@@ -138,47 +96,8 @@ func bfsNodes(stringURL string, depth int) []string {
 	for k := range visited {
 		result = append(result, k)
 	}
-	return result
-
-}
-
-func filterUrls(source string, links []string) []string {
-	result := []string{}
-
-	for _, item := range links {
-		if strings.HasPrefix(item, "#") || item == "/" || item == "" || strings.HasPrefix(item, "m") {
-			continue
-		}
-
-		normalizedURL := normalizeURL(item, source)
-
-		if !isDomainURL(normalizedURL, source) {
-			continue
-		}
-
-		result = append(result, normalizedURL)
-	}
 
 	return result
-
-}
-func isDomainURL(url, domainURL string) bool {
-
-	return strings.HasPrefix(strings.Split(url, "http")[1], strings.Split(domainURL, "http")[1])
-}
-func needsCorrection(str, baseURL string) bool {
-	if strings.HasPrefix(str, "http") {
-		return false
-	}
-	return !strings.HasPrefix(str, baseURL)
-}
-func normalizeURL(url, baseURL string) string {
-	if !needsCorrection(url, baseURL) {
-		return url
-	}
-	str := strings.TrimSuffix(baseURL, "/") + "/" + strings.TrimPrefix(url, "/")
-
-	return strings.Split(str, "#")[0]
 }
 
 type sitemapxml struct {
@@ -187,4 +106,31 @@ type sitemapxml struct {
 }
 type urlxml struct {
 	Loc string `xml:"loc"`
+}
+
+func filter(baseURL string, stringUrls []string) []string {
+	ret := []string{}
+	for _, val := range stringUrls {
+		if strings.HasPrefix(val, baseURL) {
+			ret = append(ret, val)
+		}
+	}
+
+	return ret
+}
+
+func normalize(domain, candidate string) string {
+	var result string
+	switch {
+	case strings.HasPrefix(candidate, "/"):
+		result = domain + candidate
+	case strings.HasPrefix(candidate, "#"):
+		result = domain
+	case strings.HasPrefix(candidate, "mailto:"):
+		result = candidate
+	default:
+		result = candidate
+	}
+
+	return result
 }
