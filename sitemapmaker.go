@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	linkParse "github.com/ap-pauloafonso/html-link-parse"
+	anchorfinder "github.com/ap-pauloafonso/anchor-finder"
 )
 
 const xmlns = "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -50,13 +50,22 @@ func main() {
 	os.Stdout.Write(output)
 }
 
-func getUrls(stringURL, domainURL string) []string {
+func getUrls(stringURL, domainURL string) ([]string, error) {
 	response, error := http.Get(stringURL)
+	if error != nil {
+		return nil, error
+	}
 	defer response.Body.Close()
 	ret := []string{}
 	if error == nil {
-		htmlBytes, _ := ioutil.ReadAll(response.Body)
-		childNodes := linkParse.Parse(string(htmlBytes))
+		htmlBytes, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return nil, err
+		}
+		childNodes, err := anchorfinder.Find(string(htmlBytes))
+		if err != nil {
+			return nil, err
+		}
 
 		for _, val := range childNodes {
 			ret = append(ret, normalize(domainURL, val.Url))
@@ -65,7 +74,7 @@ func getUrls(stringURL, domainURL string) []string {
 	}
 
 	filteredRet := filter(domainURL, ret)
-	return filteredRet
+	return filteredRet, nil
 }
 
 func mapContainsKey(m map[string]struct{}, k string) bool {
@@ -86,7 +95,11 @@ func bfsNodes(stringURL string, depth int) []string {
 				continue
 			}
 			visited[val] = struct{}{}
-			filteredChilds := getUrls(val, stringURL)
+			filteredChilds, err := getUrls(val, stringURL)
+			if err != nil {
+				return
+			}
+
 			for _, child := range filteredChilds {
 				if !mapContainsKey(visited, child) && !mapContainsKey(childs, child) {
 					childs[child] = struct{}{}
