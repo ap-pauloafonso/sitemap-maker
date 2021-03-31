@@ -2,7 +2,7 @@
 
 ![](./media/demo.gif)
 
-A simple tool to make [sitemap.xml](https://www.sitemaps.org/protocol.html) from a baseUrl using [html-link-parse](https://github.com/ap-pauloafonso/html-link-parse) and breadth first search algorithm.
+A simple tool to make [sitemap.xml](https://www.sitemaps.org/protocol.html) from a baseUrl using [anchor-finder](https://github.com/ap-pauloafonso/anchor-finder) and breadth first search algorithm.
 
 
 
